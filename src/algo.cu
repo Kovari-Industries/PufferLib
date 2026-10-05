@@ -656,7 +656,7 @@ void decoder_reg_params(void* w, Allocator* alloc) {
     dw->weight = {.shape = {dw->output_dim + 1, dw->hidden_dim}};
     alloc_register(alloc, &dw->weight);
     if (dw->continuous) {
-        dw->logstd = {.shape = {1, dw->output_dim}};
+        dw->logstd = {.shape = {dw->output_dim}};
         alloc_register(alloc,&dw->logstd);
     }
 }
@@ -672,7 +672,7 @@ void decoder_reg_train(void* w, void* activations,
         .saved_input =      {.shape = {B_TT, dw->hidden_dim}},
         .grad_input =       {.shape = {B_TT, dw->hidden_dim}},
         .wgrad_scratch =    {.shape = {od1, dw->hidden_dim}},
-        .logstd_scratch =   {.shape = {1, dw->output_dim}},
+        .logstd_scratch =   {.shape = {dw->output_dim}},
     };
     alloc_register(acts, &a->out);
     alloc_register(acts, &a->saved_input);

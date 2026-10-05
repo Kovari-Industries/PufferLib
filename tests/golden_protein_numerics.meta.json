@@ -1,0 +1,19 @@
+{
+  "generated_on": "2026-10-05",
+  "base_revision": "b68cef6c52e72727620e84427ad9e2cf619b4f07",
+  "source_sha256": "b3af6f458adbbc05f10f6b1479f7880b847f34fa08016eb93835a9b64bb81dce",
+  "test_sha256": "c8583cd3b14250b8a78b50928e8fb0235c5f47a153ac7e51b8b81242c4a4c9d8",
+  "golden_sha256": "07d3af414ec80e761c1e42df9f38d2bd43452ba12608769e220aca4941de3c54",
+  "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "architecture": "sm_120",
+  "cuda_compiler": "13.4.92",
+  "host_compiler": "GCC 13.3.0",
+  "driver": "595.91.07",
+  "build": "nvcc -O2 -arch=sm_120 -UNDEBUG -Isrc tests/test_protein_numerics.cu -lcublas -lcusolver -lcurand -o build/test_protein_numerics",
+  "generate": "build/test_protein_numerics --gen tests/golden_protein_numerics.txt",
+  "validate": "build/test_protein_numerics tests/golden_protein_numerics.txt",
+  "records": 412,
+  "atol": 1e-05,
+  "rtol": 0.0001,
+  "reason": "Old golden reflects behavior before normalized noise prior (841a2dc4) and learned mean (547b107d). Focused contracts check loss, finite-difference gradients, predictions, endpoints and direction before accepting this reference."
+}

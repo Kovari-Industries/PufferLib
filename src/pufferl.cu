@@ -3035,6 +3035,13 @@ TrainResult run_train(Ini* ini, TrainContext* ctx) {
     }
 
     PuffeRL* pufferl = create_pufferl(ini, ctx);
+    // Load the primary before the first rollout and the initial self-play snapshot.
+    char load_path[4096];
+    const char* initial_policy = puf_checkpoint_path_key(
+        ini, "load_model_path", load_path, sizeof(load_path));
+    if (initial_policy) {
+        pufferl_load_policy(pufferl, 0, initial_policy);
+    }
     Selfplay selfplay = {0};
     if (use_selfplay) {
         char initial_checkpoint[4096];

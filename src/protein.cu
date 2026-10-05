@@ -45,7 +45,7 @@ typedef struct {
     Space *spaces;
     int num;
     int cost_idx;
-    int optimize_direction;
+    int optimize_direction; // +1 maximizes, -1 minimizes.
 } SweepSpace;
 
 // Map raw hyperparam <-> interpolation domain (identity / log10 / log2 / logit).
@@ -609,7 +609,9 @@ ProteinSweep *protein_sweep_create(ProteinSweep init) {
 }
 
 static float logit_transform(float value) {
-    value = fmaxf(1e-9f, fminf(1.0f - 1e-9f, value));
+    if (!isfinite(value)) return NAN;
+    // 1 - 1e-9 rounds to one in float32; use the adjacent representable value.
+    value = fmaxf(1e-9f, fminf(nextafterf(1.0f, 0.0f), value));
     return fmaxf(-5.0f, logf(value / (1.0f - value)));
 }
 
@@ -618,6 +620,8 @@ void protein_sweep_observe(ProteinSweep *sw, const float *norm_params,
     if (sw->use_logit) {
         score = logit_transform(score);
     }
+    // Internal scores are utilities: larger is better in every search stage.
+    score *= sw->space->optimize_direction;
     int dim = sw->dim;
     if (is_failure || !isfinite(score)) {
         if (sw->fail_n >= sw->failure_cap) {
@@ -675,6 +679,7 @@ int protein_sweep_should_stop(const ProteinSweep *sw, float score, float cost) {
     if (sw->use_logit) {
         score = logit_transform(score);
     }
+    score *= sw->space->optimize_direction;
     if (!sw->cm_fitted) {
         return 0;
     }
@@ -1233,16 +1238,16 @@ ProteinSweepInfo protein_sweep_suggest(ProteinSweep *sw,
         cudaMemcpyDeviceToHost, sw->stream);
     cudaStreamSynchronize(sw->stream);
 
-    int best = 0;
+    int best = -1;
     float best_s = -FLT_MAX;
-    int opt_dir = sw->space->optimize_direction;
     for (int i = 0; i < n_cands; i++) {
-        float s = opt_dir * sw->h_pred[i];
+        float s = sw->h_pred[i];
         if (!is_fixed_cost) {
             float cn = sw->h_pred[n_cands + i];
             float c = expf(cn * (log_c_max - log_c_min) + log_c_min);
-            s *= (c < sw->max_suggestion_cost ? 1.0f : 0.0f)
-                * (1.0f - fabsf(target_cost - cn));
+            // Rejected candidates must not outrank valid negative predictions.
+            if (!isfinite(c) || c >= sw->max_suggestion_cost) continue;
+            s *= (1.0f - fabsf(target_cost - cn));
         }
         if (sw->clf_fitted) {
             float z = sw->clf_bias;
@@ -1256,12 +1261,18 @@ ProteinSweepInfo protein_sweep_suggest(ProteinSweep *sw,
             best = i;
         }
     }
+    if (best < 0) {
+        sobol_fallback(sw, out, is_fixed_cost, fixed_cost_norm);
+        info.is_random = 1;
+        return info;
+    }
     memcpy(out, &sw->h_cands[best * dim], dim * sizeof(float));
     float y_norm = sw->h_pred[best], c_norm = sw->h_pred[n_cands + best];
 
     info.score_loss = score_loss;
     info.cost_loss = cost_loss;
-    info.predicted_score = y_norm * (max_score - min_score) + min_score;
+    info.predicted_score = sw->space->optimize_direction
+        * (y_norm * (max_score - min_score) + min_score);
     info.predicted_cost = expf(c_norm * (log_c_max - log_c_min) + log_c_min);
     info.rating = best_s;
     info.n_pareto = n_use;
